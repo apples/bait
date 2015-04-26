@@ -201,49 +201,9 @@ struct StaticBT {
     }
 };
 
-template<typename T>
-void print(const T&, string indent) {
-    cout << indent << "LEAF" << endl;
-}
-
-template<typename T>
-void print(const StaticBT::inverter_t<T>& iv, string indent) {
-    cout << indent << "inverter(" << endl;
-    print(iv.value, indent + "    ");
-    cout << indent << ")," << endl;
-}
-
-template<typename T>
-void print(const StaticBT::until_fail_t<T>& iv, string indent) {
-    cout << indent << "until_fail(" << endl;
-    print(iv.value, indent + "    ");
-    cout << indent << ")," << endl;
-}
-
-template<typename... Ts, size_t... Is>
-void print(const tuple<Ts...>& tup, string indent, integer_sequence<size_t, Is...>) {
-    using intarr = int[sizeof...(Ts)];
-    intarr{(print(get<Is>(tup), indent), 1)...};
-}
-
-template<typename... Ts>
-void print(const StaticBT::sequence_t<status::SUCCESS, Ts...>& iv, string indent) {
-    cout << indent << "sequence(" << endl;
-    print(iv.value, indent + "    ", make_integer_sequence<size_t, sizeof...(Ts)>());
-    cout << indent << ")," << endl;
-}
-
-template<typename... Ts>
-void print(const StaticBT::sequence_t<status::FAILURE, Ts...>& iv, string indent) {
-    cout << indent << "selector(" << endl;
-    print(iv.value, indent + "    ", make_integer_sequence<size_t, sizeof...(Ts)>());
-    cout << indent << ")," << endl;
-}
-
 } // namespace _detail_bait_static
 
 using _detail_bait_static::StaticBT;
-using _detail_bait_static::print;
 
 } // namespace bait
 

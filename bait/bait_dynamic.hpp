@@ -91,28 +91,28 @@ struct DynamicBT {
     };
 
     template<typename... Ts>
-    static constexpr auto sequence(Ts&& ... ts) {
+    static constexpr Func sequence(Ts&& ... ts) {
         return RawSequence({forward<Ts>(ts)...});
     }
 
-    static constexpr auto sequence(vector<Func> funcs) {
+    static constexpr Func sequence(vector<Func> funcs) {
         return RawSequence(move(funcs));
     }
 
     template<typename... Ts>
-    static constexpr auto selector(Ts&& ... ts) {
+    static constexpr Func selector(Ts&& ... ts) {
         return RawSelector({forward<Ts>(ts)...});
     }
 
-    static constexpr auto selector(vector<Func> funcs) {
+    static constexpr Func selector(vector<Func> funcs) {
         return RawSelector(move(funcs));
     }
 
-    static constexpr auto inverter(Func t) {
+    static constexpr Func inverter(Func t) {
         return RawInverter(move(t));
     }
 
-    static constexpr auto until_fail(Func t) {
+    static constexpr Func until_fail(Func t) {
         return RawUntilFail(move(t));
     }
 
@@ -207,60 +207,9 @@ struct DynamicBT {
     }
 };
 
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::Func& indent);
-
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::RawSequence& seq, string indent) {
-    cout << indent << "sequence(" << endl;
-    for (auto& f : seq.children) {
-        print(f, indent + "    ");
-    }
-    cout << indent << ")," << endl;
-}
-
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::RawSelector& seq, string indent) {
-    cout << indent << "selector(" << endl;
-    for (auto& f : seq.children) {
-        print(f, indent + "    ");
-    }
-    cout << indent << ")," << endl;
-}
-
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::RawInverter& inv, string indent) {
-    cout << indent << "inverter(" << endl;
-    print(inv.child, indent + "    ");
-    cout << indent << ")," << endl;
-}
-
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::RawUntilFail& uf, string indent) {
-    cout << indent << "until_fail(" << endl;
-    print(uf.child, indent + "    ");
-    cout << indent << ")," << endl;
-}
-
-template <typename... Args>
-void print(const typename DynamicBT<Args...>::Func& tree, string indent) {
-    if (auto branch = tree.template target<typename DynamicBT<Args...>::RawSequence>()) {
-        return print(*branch, indent);
-    } else if (auto branch = tree.template target<typename DynamicBT<Args...>::RawSelector>()) {
-        return print(*branch, indent);
-    } else if (auto branch = tree.template target<typename DynamicBT<Args...>::RawInverter>()) {
-        return print(*branch, indent);
-    } else if (auto branch = tree.template target<typename DynamicBT<Args...>::RawUntilFail>()) {
-        return print(*branch, indent);
-    } else {
-        cout << indent << "LEAF," << endl;
-    }
-}
-
 } // namespace _detail_bait_dynamic
 
 using _detail_bait_dynamic::DynamicBT;
-using _detail_bait_dynamic::print;
 
 } // namespace bait
 
