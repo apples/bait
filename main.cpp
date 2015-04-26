@@ -61,12 +61,14 @@ auto behavior =
 auto behavior2 = BT::simplify(behavior);
 
 int main() {
-    print(cout, behavior, "");
-    print(cout, behavior2, "");
+    cout << "BEFORE SIMPLIFY:" << endl;
+    print(cout, behavior, "    ");
+    cout << "AFTER SIMPLIFY:" << endl;
+    print(cout, behavior2, "    ");
 
     using strings = string[3];
-    cout << (strings{"SUCCESS", "FAILURE", "RUNNING"}[(int) behavior2()]) << endl;
+    cout << "Result: " << (strings{"Success!", "Failure!", "Running!"}[(int) behavior2()]) << endl;
 
-    cout << sizeof(behavior) << endl;
-    cout << sizeof(behavior2) << endl;
+    cout << "Sizeof behavior:  " << sizeof(behavior) << endl;
+    cout << "Sizeof behavior2: " << sizeof(behavior2) << endl;
 }
