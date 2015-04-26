@@ -9,7 +9,7 @@
 
 using namespace std;
 
-#if 1
+#if 0
 using BT = bait::DynamicBT<>;
 template <typename... Ts>
 void print(Ts&&... ts) {return bait::print_dynamic(forward<Ts>(ts)...);}

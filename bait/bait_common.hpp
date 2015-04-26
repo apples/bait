@@ -1,6 +1,8 @@
 #ifndef BEHAVIORTREEPROJ_BAIT_COMMON_HPP
 #define BEHAVIORTREEPROJ_BAIT_COMMON_HPP
 
+#include <type_traits>
+
 namespace bait {
 
 enum class status {
@@ -22,12 +24,32 @@ enum class Optimization {
     REMOVE_UNREACHABLE,
 
     // Meta
-    QUICK,
+            QUICK,
     ALL
 };
 
-template <Optimization...>
-struct OptHolder {};
+template<Optimization...>
+struct OptHolder {
+};
+
+template<Optimization...>
+struct is_in_impl;
+
+template<Optimization opt, Optimization Head, Optimization... Tail>
+struct is_in_impl<opt, Head, Tail...> : std::conditional_t<opt == Head, std::true_type, is_in_impl<opt, Tail...>> {
+};
+
+template<Optimization opt>
+struct is_in_impl<opt> : std::false_type {
+};
+
+template<Optimization opt, Optimization... Opts>
+constexpr bool is_in() {
+    return is_in_impl<opt, Opts...>::value;
+}
+
+template<typename BT, Optimization... Opts>
+struct Simplifier;
 
 } // namespace bait
 

@@ -131,22 +131,9 @@ struct DynamicBT {
     using fail = constant_t<status::FAILURE>;
 };
 
-template<Optimization...>
-struct is_in_impl;
+} // namespace _detail_bait_dynamic
 
-template<Optimization opt, Optimization Head, Optimization... Tail>
-struct is_in_impl<opt,Head,Tail...> : conditional_t<opt==Head,true_type,is_in_impl<opt,Tail...>> {};
-
-template<Optimization opt>
-struct is_in_impl<opt> : false_type {};
-
-template <Optimization opt, Optimization... Opts>
-constexpr bool is_in() {
-    return is_in_impl<opt,Opts...>::value;
-}
-
-template<typename BT, Optimization... Opts>
-struct Simplifier;
+using _detail_bait_dynamic::DynamicBT;
 
 template<typename... Args, Optimization... Opts>
 struct Simplifier<DynamicBT<Args...>, Opts...> {
@@ -154,6 +141,7 @@ struct Simplifier<DynamicBT<Args...>, Opts...> {
 
     template<status Mode>
     typename BT::Func simplify(typename BT::template RawSerial<Mode> seq) const {
+        using namespace std;
         vector<typename BT::Func> finalvec = move(seq.children);
         vector<typename BT::Func> tmpvec;
 
@@ -180,11 +168,11 @@ struct Simplifier<DynamicBT<Args...>, Opts...> {
         if (is_in<Optimization::REMOVE_UNREACHABLE,Opts...>()) {
             auto is_instant_success = [](auto& f) {
                 return bool(f.template target<typename BT::template constant_t < Mode>>
-                ());
+                        ());
             };
             auto is_instant_fail = [](auto& f) {
                 return bool(f.template target<typename BT::template constant_t < flip(Mode)>>
-                ());
+                        ());
             };
             auto success_iter = find_if(finalvec.begin(), finalvec.end(), is_instant_success);
             if (success_iter != finalvec.end()) {
@@ -224,6 +212,7 @@ struct Simplifier<DynamicBT<Args...>, Opts...> {
     }
 
     typename BT::Func simplify(typename BT::RawInverter inv) const {
+        using namespace std;
         inv.child = simplify(move(inv.child));
         if (is_in<Optimization::UNWRAP_INVERTERS,Opts...>()) {
             if (auto ptr = inv.child.template target<typename BT::RawInverter>()) {
@@ -234,12 +223,14 @@ struct Simplifier<DynamicBT<Args...>, Opts...> {
     }
 
     typename BT::Func simplify(typename BT::RawUntilFail uf) const {
+        using namespace std;
         uf.child = simplify(move(uf.child));
         return uf;
     }
 
     // Dispatcher
     typename BT::Func simplify(typename BT::Func tree) const {
+        using namespace std;
         if (auto branch = tree.template target<typename BT::RawSequence>()) {
             return simplify(move(*branch));
         } else if (auto branch = tree.template target<typename BT::RawSelector>()) {
@@ -256,6 +247,7 @@ struct Simplifier<DynamicBT<Args...>, Opts...> {
     }
 
     typename BT::Func operator()(typename BT::Func tree) const {
+        using namespace std;
         return simplify(move(tree));
     }
 };
@@ -280,11 +272,6 @@ struct Simplifier<DynamicBT<Args...>, Optimization::ALL>
                 Optimization::UNWRAP_SERIES,
                 Optimization::REMOVE_UNREACHABLE> {
 };
-
-} // namespace _detail_bait_dynamic
-
-using _detail_bait_dynamic::DynamicBT;
-using _detail_bait_dynamic::Simplifier;
 
 } // namespace bait
 

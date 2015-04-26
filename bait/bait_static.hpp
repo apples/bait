@@ -16,7 +16,9 @@ using namespace std;
 template<typename T>
 struct EBCO {
     T value;
+
     constexpr EBCO() = default;
+
     constexpr EBCO(T t) : value(move(t)) { }
 };
 
@@ -67,6 +69,7 @@ struct StaticBT {
     template<status Mode>
     struct sequence_t<Mode> : EBCO<tuple<>> {
         constexpr sequence_t(tuple<> t) : EBCO<tuple<>>(t) { };
+
         template<typename... Args>
         constexpr status operator()(Args&& ... args) {
             return Mode;
@@ -76,7 +79,9 @@ struct StaticBT {
     template<typename T>
     struct inverter_t : EBCO<T> {
         constexpr inverter_t() = default;
+
         constexpr inverter_t(T t) : EBCO<T>(move(t)) { }
+
         template<typename... Args>
         status operator()(Args&& ... args) {
             status result = EBCO<T>::value(forward<Args>(args)...);
@@ -94,6 +99,7 @@ struct StaticBT {
     template<typename T>
     struct until_fail_t : EBCO<T> {
         constexpr until_fail_t(T t) : EBCO<T>(move(t)) { }
+
         template<typename... Args>
         status operator()(Args&& ... args) {
             status result = EBCO<T>::value(forward<Args>(args)...);
@@ -141,6 +147,7 @@ struct StaticBT {
     }
 
     static constexpr auto succeed() { return sequence(); }
+
     static constexpr auto fail() { return selector(); }
 
     template<typename Head, typename... Tail, size_t... Is>
@@ -160,17 +167,17 @@ struct StaticBT {
 
     template<status Mode, typename... Ts, typename... Us>
     static auto sequence_cat(sequence_t<Mode, Ts...> s1, sequence_t<Mode, Us...> s2) {
-        return sequence_t < Mode, Ts..., Us...>(tuple_cat(s1.value, s2.value));
+        return sequence_t<Mode, Ts..., Us...>(tuple_cat(s1.value, s2.value));
     }
 
     template<status Mode, typename... Ts, typename U>
     static auto sequence_cat(sequence_t<Mode, Ts...> s1, U s2) {
-        return sequence_t < Mode, Ts..., U > (tuple_cat(s1.value, make_tuple(s2)));
+        return sequence_t<Mode, Ts..., U>(tuple_cat(s1.value, make_tuple(s2)));
     }
 
     template<status Mode, typename T, typename... Us>
     static auto sequence_cat(T s1, sequence_t<Mode, Us...> s2) {
-        return sequence_t < Mode, T, Us...>(tuple_cat(make_tuple(s1), s2.value));
+        return sequence_t<Mode, T, Us...>(tuple_cat(make_tuple(s1), s2.value));
     }
 
     template<status Mode, typename T, typename U>
@@ -204,6 +211,17 @@ struct StaticBT {
 } // namespace _detail_bait_static
 
 using _detail_bait_static::StaticBT;
+
+template<Optimization... Opts>
+struct Simplifier<StaticBT, Opts...> {
+    using BT = StaticBT;
+
+    template<typename T>
+    auto operator()(T tree) const {
+        using namespace std;
+        return BT::simplify(move(tree));
+    }
+};
 
 } // namespace bait
 
