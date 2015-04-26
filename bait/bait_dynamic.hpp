@@ -3,6 +3,7 @@
 
 #include "bait_common.hpp"
 
+#include <algorithm>
 #include <vector>
 #include <functional>
 #include <iterator>
@@ -14,7 +15,7 @@ namespace _detail_bait_dynamic {
 
 using namespace std;
 
-template <typename T>
+template<typename T>
 static auto vector_cat(vector<T>&& s1, vector<T>&& s2) {
     vector<T> funcs;
     funcs.reserve(s1.size() + s2.size());
@@ -26,7 +27,7 @@ static auto vector_cat(vector<T>&& s1, vector<T>&& s2) {
 template<typename... Args>
 struct DynamicBT {
     using Func = function<status(Args...)>;
-    
+
     template<status Mode>
     struct RawSerial {
         vector<Func> children;
@@ -53,13 +54,15 @@ struct DynamicBT {
             return Mode;
         }
     };
-    
+
     using RawSequence = RawSerial<status::SUCCESS>;
     using RawSelector = RawSerial<status::FAILURE>;
 
     struct RawInverter {
         Func child;
+
         constexpr RawInverter() = default;
+
         constexpr RawInverter(Func child) : child(move(child)) { }
 
         status operator()(Args&& ... args) {
@@ -77,6 +80,7 @@ struct DynamicBT {
 
     struct RawUntilFail {
         Func child;
+
         constexpr RawUntilFail(Func child) : child(move(child)) { }
 
         status operator()(Args&& ... args) {
@@ -122,94 +126,165 @@ struct DynamicBT {
             return Mode;
         }
     };
-    
+
     using succeed = constant_t<status::SUCCESS>;
     using fail = constant_t<status::FAILURE>;
+};
+
+template<Optimization...>
+struct is_in_impl;
+
+template<Optimization opt, Optimization Head, Optimization... Tail>
+struct is_in_impl<opt,Head,Tail...> : conditional_t<opt==Head,true_type,is_in_impl<opt,Tail...>> {};
+
+template<Optimization opt>
+struct is_in_impl<opt> : false_type {};
+
+template <Optimization opt, Optimization... Opts>
+constexpr bool is_in() {
+    return is_in_impl<opt,Opts...>::value;
+}
+
+template<typename BT, Optimization... Opts>
+struct Simplifier;
+
+template<typename... Args, Optimization... Opts>
+struct Simplifier<DynamicBT<Args...>, Opts...> {
+    using BT = DynamicBT<Args...>;
 
     template<status Mode>
-    static Func simplify(RawSerial<Mode> seq) {
-        if (seq.children.empty()) {
-            return succeed();
+    typename BT::Func simplify(typename BT::template RawSerial<Mode> seq) const {
+        vector<typename BT::Func> finalvec = move(seq.children);
+        vector<typename BT::Func> tmpvec;
+
+        // Simplify children
+        for (auto& f : finalvec) {
+            f = simplify(move(f));
         }
-        vector<Func> simp_head;
-        vector<Func> simp_tail;
-        seq.children.front() = simplify(move(seq.children.front()));
-        if (auto ptr = seq.children.front().template target<RawSerial<Mode>>()) {
-            simp_head = move(ptr->children);
-        } else if (auto ptr = seq.children.front().template target<constant_t<Mode>>()) {
-        } else if (auto ptr = seq.children.front().template target<constant_t<flip(Mode)>>()) {
-            return fail();
-        } else {
-            simp_head.push_back(move(seq.children.front()));
-        }
-        if (simp_head.size() > 1) {
-            for (auto& f : simp_head) {
-                f = simplify(move(f));
-            }
-        }
-        seq.children.erase(seq.children.begin());
-        auto newseq = simplify(move(seq));
-        if (auto ptr = newseq.template target<RawSerial<Mode>>()) {
-            simp_tail = move(ptr->children);
-        } else {
-            simp_tail.push_back(move(newseq));
-        }
-        auto catvec = vector_cat(move(simp_head), move(simp_tail));
-        vector<Func> finalvec;
-        finalvec.reserve(catvec.size());
-        for (auto& f : catvec) {
-            if (auto ptr = f.template target<constant_t<Mode>>()) {
-            } else if (auto ptr = f.template target<constant_t<flip(Mode)>>()) {
-                if (finalvec.empty()) {
-                    return move(f);
+
+        // Flatten series
+        if (is_in<Optimization::FLATTEN_SERIES,Opts...>()) {
+            tmpvec.reserve(finalvec.size());
+            for (auto& f : finalvec) {
+                if (auto ptr = f.template target<typename BT::template RawSerial < Mode>>()) {
+                    move(ptr->children.begin(), ptr->children.end(), back_inserter(tmpvec));
                 } else {
-                    break;
+                    tmpvec.push_back(move(f));
                 }
-            } else {
-                finalvec.push_back(move(f));
+            }
+            swap(tmpvec, finalvec);
+            tmpvec.clear();
+        }
+
+        // Remove unreachable children
+        if (is_in<Optimization::REMOVE_UNREACHABLE,Opts...>()) {
+            auto is_instant_success = [](auto& f) {
+                return bool(f.template target<typename BT::template constant_t < Mode>>
+                ());
+            };
+            auto is_instant_fail = [](auto& f) {
+                return bool(f.template target<typename BT::template constant_t < flip(Mode)>>
+                ());
+            };
+            auto success_iter = find_if(finalvec.begin(), finalvec.end(), is_instant_success);
+            if (success_iter != finalvec.end()) {
+                finalvec.erase(next(success_iter), finalvec.end());
+            }
+            auto fail_iter = find_if(finalvec.begin(), finalvec.end(), is_instant_fail);
+            finalvec.erase(fail_iter, finalvec.end());
+        }
+
+        // Unwrap singular or empty series
+        if (is_in<Optimization::UNWRAP_SERIES,Opts...>()) {
+            if (finalvec.size() == 0) {
+                return typename BT::succeed();
+            } else if (finalvec.size() == 1) {
+                return move(finalvec.front());
             }
         }
-        if (finalvec.size() == 0) {
-            return succeed();
-        } else if (finalvec.size() == 1) {
-            return move(finalvec.front());
+
+        // Minimize inverters
+        if (is_in<Optimization::MINIMIZE_SERIES_INVERSION,Opts...>()) {
+            auto is_inverter = [](auto& f) { return bool(f.template target<typename BT::RawInverter>()); };
+            auto inverted_children = count_if(finalvec.begin(), finalvec.end(), is_inverter);
+            if (inverted_children > finalvec.size() - inverted_children + 1) {
+                for (auto& f : finalvec) {
+                    if (auto ptr = f.template target<typename BT::RawInverter>()) {
+                        auto tmp = move(ptr->child);
+                        f = move(tmp);
+                    } else {
+                        f = BT::inverter(move(f));
+                    }
+                }
+                return BT::inverter(typename BT::template RawSerial<flip(Mode)>(move(finalvec)));
+            }
         }
-        return RawSerial<Mode>(move(finalvec));
+
+        return typename BT::template RawSerial<Mode>(move(finalvec));
     }
 
-    static Func simplify(RawInverter inv) {
-        if (auto ptr = inv.child.template target<RawInverter>()) {
-            return simplify(move(ptr->child));
-        } else {
-            inv.child = simplify(move(inv.child));
-            return inv;
+    typename BT::Func simplify(typename BT::RawInverter inv) const {
+        inv.child = simplify(move(inv.child));
+        if (is_in<Optimization::UNWRAP_INVERTERS,Opts...>()) {
+            if (auto ptr = inv.child.template target<typename BT::RawInverter>()) {
+                return move(ptr->child);
+            }
         }
+        return inv;
     }
 
-    static Func simplify(RawUntilFail uf) {
+    typename BT::Func simplify(typename BT::RawUntilFail uf) const {
         uf.child = simplify(move(uf.child));
         return uf;
     }
 
     // Dispatcher
-    static Func simplify(Func tree) {
-        if (auto branch = tree.template target<RawSequence>()) {
+    typename BT::Func simplify(typename BT::Func tree) const {
+        if (auto branch = tree.template target<typename BT::RawSequence>()) {
             return simplify(move(*branch));
-        } else if (auto branch = tree.template target<RawSelector>()) {
+        } else if (auto branch = tree.template target<typename BT::RawSelector>()) {
             return simplify(move(*branch));
-        } else if (auto branch = tree.template target<RawInverter>()) {
+        } else if (auto branch = tree.template target<typename BT::RawInverter>()) {
             return simplify(move(*branch));
-        } else if (auto branch = tree.template target<RawUntilFail>()) {
+        } else if (auto branch = tree.template target<typename BT::RawUntilFail>()) {
+            return simplify(move(*branch));
+        } else if (auto branch = tree.template target<typename BT::Func>()) {
             return simplify(move(*branch));
         } else {
             return tree;
         }
     }
+
+    typename BT::Func operator()(typename BT::Func tree) const {
+        return simplify(move(tree));
+    }
+};
+
+template<typename... Args>
+struct Simplifier<DynamicBT<Args...>, Optimization::NONE> : Simplifier<DynamicBT<Args...>> {
+};
+
+template<typename... Args>
+struct Simplifier<DynamicBT<Args...>, Optimization::QUICK>
+        : Simplifier<DynamicBT<Args...>,
+                Optimization::UNWRAP_INVERTERS,
+                Optimization::UNWRAP_SERIES> {
+};
+
+template<typename... Args>
+struct Simplifier<DynamicBT<Args...>, Optimization::ALL>
+        : Simplifier<DynamicBT<Args...>,
+                Optimization::UNWRAP_INVERTERS,
+                Optimization::MINIMIZE_SERIES_INVERSION,
+                Optimization::FLATTEN_SERIES,
+                Optimization::UNWRAP_SERIES,
+                Optimization::REMOVE_UNREACHABLE> {
 };
 
 } // namespace _detail_bait_dynamic
 
 using _detail_bait_dynamic::DynamicBT;
+using _detail_bait_dynamic::Simplifier;
 
 } // namespace bait
 

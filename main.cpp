@@ -19,6 +19,8 @@ template <typename... Ts>
 void print(Ts&&... ts) {return bait::print_static(forward<Ts>(ts)...);}
 #endif
 
+constexpr auto simplify = bait::Simplifier<BT,bait::Optimization::ALL>();
+
 using bait::status;
 status find_player() { return status::SUCCESS; }
 status player_in_range() { return status::SUCCESS; }
@@ -56,9 +58,14 @@ auto behavior =
                                 ),
                                 stand
                         )
+                ),
+                BT::selector(
+                        BT::inverter(find_player),
+                        BT::inverter(walk_randomly),
+                        BT::inverter(stand)
                 )
         );
-auto behavior2 = BT::simplify(behavior);
+auto behavior2 = simplify(behavior);
 
 int main() {
     cout << "BEFORE SIMPLIFY:" << endl;
