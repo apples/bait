@@ -48,7 +48,6 @@ struct DynamicBT {
                         current = 0;
                         return result;
                 }
-                ++current;
             }
             current = 0;
             return Mode;
